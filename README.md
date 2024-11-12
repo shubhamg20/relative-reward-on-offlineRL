@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Extracting Reward Functions from Diffusion Models
 
 Official code for the NeurIPS 2023 paper [Extracting Reward Functions from Diffusion Models](https://openreview.net/forum?id=NN60HKTur2). If any problems arise with the code, feel free to reach out to nuti@robots.ox.ac.uk.
@@ -260,3 +261,6 @@ python ./scripts/train_gradient_matching.py --batch_size 64 --dim 32 --lr 0.0001
 ```
 
 # diff-relative-reward-offpolicy
+=======
+# relative-reward-on-offlineRL
+>>>>>>> 1dc01e31231f4ac1d596ddc6eb4daeefddedd378
