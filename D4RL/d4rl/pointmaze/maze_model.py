@@ -188,8 +188,8 @@ U_MAZE_EVAL = \
 OPEN = \
         "#######\\"+\
         "#OOOOO#\\"+\
-        "#OOGOO#\\"+\
         "#OOOOO#\\"+\
+        "#OOOOG#\\"+\
         "#######"
 
 
@@ -239,6 +239,7 @@ class MazeEnv(mujoco_env.MujocoEnv, utils.EzPickle, offline_env.OfflineEnv):
         self.do_simulation(action, self.frame_skip)
         self.set_marker()
         ob = self._get_obs()
+        # print(self._target)
         if self.reward_type == 'sparse':
             reward = 1.0 if np.linalg.norm(ob[0:2] - self._target) <= 0.5 else 0.0
         elif self.reward_type == 'dense':

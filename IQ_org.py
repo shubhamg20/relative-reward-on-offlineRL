@@ -1,5 +1,6 @@
 import sys, tqdm
 import torch, pickle
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import cosine
@@ -34,24 +35,75 @@ class TrainingPipeline:
         self.epoch = 1
         
     def evaluate(self, env, model, n_episodes=10):
+        eval_total_rewards = []
+        trajectories = []
+        reward_arr_list = []
         for episode in range(n_episodes):
             obs = env.reset()
             done = False
             episode_reward = 0
+            episode_trajectory = []
+            reward_arr = []
             while not done:
                 action = model.predict([obs])[0]
                 obs, reward, done, _ = env.step(action)
                 episode_reward += reward
-            self.eval_total_rewards.append(episode_reward)
-        print(f"Evaluated on {n_episodes} episodes: avg_rewd: {np.mean(self.eval_total_rewards)}")
-        return np.mean(self.eval_total_rewards)
-        
+                reward_arr.append(reward)
+                episode_trajectory.append(obs)
+
+            reward_arr_list.append(reward_arr)
+            eval_total_rewards.append(episode_reward)
+            trajectories.append(np.array(episode_trajectory))
+        print(f"Evaluated on {n_episodes} episodes: avg_rewd: {np.mean(eval_total_rewards)}")
+        return np.mean(eval_total_rewards), trajectories, reward_arr_list
+    
     def callback(self, iql, epoch, total_steps):
         self.iql = iql
         if self.epoch != epoch:
             self.epoch = epoch
-            avg_rewd = self.evaluate(self.env, iql, n_episodes=10)
+            n_episodes=10
+            avg_rewd, trajectories, rewards_arr= self.evaluate(self.env, iql, n_episodes)
             self.eval_total_rewards.append(avg_rewd)
+            # Extract initial and goal points
+            initial_points = [trajectory[0] for trajectory in trajectories]
+            goal_points = [trajectory[-1] for trajectory in trajectories]
+
+            initial_points = np.array(initial_points)
+            goal_points = np.array(goal_points)
+
+            # Create a single figure with multiple subplots
+            plt.figure(figsize=(18, 12))
+
+            # Subplot 1: Trajectories of the first 5 episodes
+            plt.subplot(3, 1, 1)
+            for i, trajectory in enumerate(trajectories[:5]):  # Plot first 5 trajectories
+                plt.plot(trajectory[:, 0], trajectory[:, 1], label=f"Episode {i+1}")
+            plt.xlabel("X")
+            plt.ylabel("Y")
+            plt.title("Trajectories of First 5 Episodes")
+            plt.legend()
+
+            # Subplot 2: Reward function for each trajectory
+            plt.subplot(3, 1, 2)
+            for i, rewards in enumerate(rewards_arr[:n_episodes]):
+                plt.plot(rewards, label=f"Episode {i+1}")
+            plt.xlabel('Step')
+            plt.ylabel('Reward')
+            plt.title('Reward Function for Each Trajectory')
+            plt.legend()
+
+            # Subplot 3: Initial and goal points
+            plt.subplot(3, 1, 3)
+            plt.scatter(initial_points[:, 0], initial_points[:, 1], color='red', marker='x', s=100, label='Start')
+            plt.scatter(goal_points[:, 0], goal_points[:, 1], color='blue', marker='*', s=100, label='Goal')
+            plt.xlabel('X')
+            plt.ylabel('Y')
+            plt.title('Initial and Goal Points')
+            plt.legend()
+
+            plt.tight_layout()
+            plt.savefig(f"org_general_IQ/eval_{epoch}.png")
+            
 
     def train(self, n_steps=500000, n_steps_per_epoch=5000):
         sample_indices = np.random.choice(self.dataset.observations.shape[0], size=100, replace=False)
@@ -77,14 +129,7 @@ class TrainingPipeline:
         plt.ylabel("Loss")
         plt.title("Actor and Critic Losses Over Time")
         plt.legend()
-        plt.savefig("actor_critic_losses.png")
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(range(1, len(self.cosine_similarities) + 1), self.cosine_similarities, marker='o')
-        plt.xlabel("Epoch")
-        plt.ylabel("Cosine Similarity")
-        plt.title("Cosine Similarity Between Q-Values Across Epochs")
-        plt.savefig("cosine_similarity_q_values.png")
+        plt.savefig("org_general_IQ/openmaze_actor_critic_losses.png")
         
         plt.figure(figsize=(10, 6))
         plt.hist(self.eval_total_rewards, bins=20, alpha=0.7, label="Reward Distribution")
@@ -92,7 +137,7 @@ class TrainingPipeline:
         plt.ylabel("Frequency")
         plt.title("Reward Distribution Across Evaluation Episodes")
         plt.legend()
-        plt.savefig("reward_distribution.png")
+        plt.savefig("org_general_IQ/openmaze__reward_distribution.png")
 
 
         # Plot Average Reward over Epochs
@@ -102,10 +147,22 @@ class TrainingPipeline:
         plt.ylabel("Average Reward")
         plt.title("Training Performance (Average Reward Over Epochs)")
         plt.legend()
-        plt.savefig("average_reward_over_epochs.png")
+        plt.savefig("org_general_IQ/openmaze_average_reward_over_epochs.png")
 
 
-dataset, env = get_d4rl('halfcheetah-expert-v2')
+dataset, env = get_d4rl('maze2d-open-v0')
+path = "/home/shubham/diffusion-relative-rewards/maze2d/required_datasets/general/maze2d-open-v0_general_pt_1.hdf5"
+with h5py.File(path, 'r') as f:
+    observations = f['observations'][:]
+    actions = f['actions'][:]
+    rewards = f['rewards'][:]
+    terminals = f['terminals'][:]
+
+dataset = MDPDataset(observations=observations, actions=actions, rewards=rewards, terminals=terminals)
+
+print(len(dataset.episodes))
+env.set_target(np.array([2, 4]))
+print(f"Goal: {env.get_target()}")
 # Training
 pipeline = TrainingPipeline(dataset, env)
 pipeline.train(500000, 10000)

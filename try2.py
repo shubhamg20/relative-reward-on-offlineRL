@@ -6,6 +6,7 @@ from scipy.spatial.distance import cosine
 from d3rlpy.datasets import get_d4rl, MDPDataset
 from d3rlpy.algos import IQL
 
+
 # Adjust paths if necessary
 sys.path.append('/home/shubham/diffusion-relative-rewards/locomotion')
 sys.path.append('/home/shubham/diffusion-relative-rewards/d3rlpy/')
@@ -58,22 +59,28 @@ class RewardEvaluator:
         self.batch_size = batch_size
 
     def compute_rewards(self, dataset, cond_dim=23):
-        state_actions = np.concatenate([dataset.observations, dataset.actions], axis=-1)
-        state_actions = np.expand_dims(state_actions, axis=(1))
-        state_actions_tensor = torch.tensor(state_actions, dtype=torch.float32)
+        # state_actions = np.concatenate([dataset.observations, dataset.actions], axis=-1)
+        state = dataset.observations
+        state = np.expand_dims(state, axis=(1))
+        state_tensor = torch.tensor(state, dtype=torch.float32)
+        print(state_tensor.shape)
 
-        cond = torch.zeros((1, cond_dim), dtype=torch.float32)
+        # cond = torch.zeros((1, cond_dim), dtype=torch.float32)
+        cond = dataset.actions
+        cond = np.expand_dims(cond, axis=(1))
+        cond_tensor = torch.tensor(cond, dtype=torch.float32)
         t = torch.zeros((1), dtype=torch.float32)
-        
         rewards = []
-        num_batches = (len(state_actions_tensor) + self.batch_size - 1) // self.batch_size
+        num_batches = (len(state_tensor) + self.batch_size - 1) // self.batch_size
         for i in tqdm.tqdm(range(num_batches)):
             start_idx = i * self.batch_size
-            end_idx = min((i + 1) * self.batch_size, len(state_actions_tensor))
-            state_action_batch = state_actions_tensor[start_idx:end_idx]
-            cond_batch = cond.expand(len(state_action_batch), -1)
+            end_idx = min((i + 1) * self.batch_size, len(state_tensor))
+            state_action_batch = state_tensor[start_idx:end_idx]
+            # cond_batch = cond.expand(len(state_action_batch), -1)
+            cond_batch = cond_tensor[start_idx:end_idx]
             t_batch = t.expand(len(state_action_batch))
-
+            print(state_action_batch.shape, cond_batch.shape, t_batch.shape)
+        # [(23, 64), (64, 64), (64, 128), (128, 128)]
             with torch.no_grad():
                 reward_batch = self.model(state_action_batch, cond_batch, t_batch)
             rewards.extend(reward_batch.cpu().numpy())
@@ -89,7 +96,7 @@ class TrainingPipeline:
             value_learning_rate=3e-4,
             batch_size=256,
             actor_update_frequency=1,
-            critic_update_frequency=1,
+            critic_update_frequency=1, 
             value_update_frequency=1,
             target_update_interval=2000,
             n_critics=2,
@@ -176,7 +183,7 @@ class TrainingPipeline:
 
 # Main Execution
 model_config_path = '/home/shubham/diffusion-relative-rewards/locomotion/locomotion_diffusion_logs/logs/halfcheetah-expert-v2/gradient_matching/H4_Dmixed_DIMS16,16,32,32_ARCHmodels.ValueFunction_from_replay/model_config.pkl'
-checkpoint_path = '/home/shubham/diffusion-relative-rewards/locomotion/locomotion_diffusion_logs/logs/halfcheetah-expert-v2/gradient_matching/H4_Dmixed_DIMS16,16,32,32_ARCHmodels.ValueFunction_from_replay/model_config.pkl'
+checkpoint_path = '/home/shubham/diffusion-relative-rewards/locomotion/locomotion_diffusion_logs/logs/halfcheetah-expert-v2/gradient_matching/H4_Dmixed_DIMS16,16,32,32_ARCHmodels.ValueFunction_from_replay/state_99991.pt'
 
 # Load model and configuration
 model_config = ModelLoader.load_config(model_config_path)
@@ -186,17 +193,15 @@ reward_model.load_state_dict(chk, strict=False)
 reward_model.eval()
 
 # Process dataset
-processor_expert = DatasetProcessor('halfcheetah-expert-v2')
-dataset_expert = processor_expert.process_episodes()
-processor_medium = DatasetProcessor('halfcheetah-medium-v2')
-dataset_medium = processor_expert.process_episodes()
-dataset = mixed_
+processor = DatasetProcessor('halfcheetah-medium-expert-v2')
+dataset = processor.process_episodes()
+
 # Compute rewards
 reward_evaluator = RewardEvaluator(reward_model)
 rewards = reward_evaluator.compute_rewards(dataset)
 dataset = MDPDataset(dataset.observations, dataset.actions, rewards, dataset.terminals)
 
 # Training
-# pipeline = TrainingPipeline(dataset, processor.env)
-# pipeline.train(500000, 10000)
-# pipeline.plot_metrics()
+pipeline = TrainingPipeline(dataset, processor.env)
+pipeline.train(1000000, 10000)
+pipeline.plot_metrics()

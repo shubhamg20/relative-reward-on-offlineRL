@@ -6,6 +6,7 @@ from scipy.spatial.distance import cosine
 from d3rlpy.datasets import get_d4rl, MDPDataset
 from d3rlpy.algos import IQL
 
+
 # Adjust paths if necessary
 sys.path.append('/home/shubham/diffusion-relative-rewards/locomotion')
 sys.path.append('/home/shubham/diffusion-relative-rewards/d3rlpy/')
@@ -16,7 +17,7 @@ class ModelLoader:
     @staticmethod
     def load_checkpoint(chk_path):
         with open(chk_path, 'rb') as f:
-            chk = pickle.load(f)
+            chk = torch.load(f)
         return chk
 
     @staticmethod
@@ -65,7 +66,6 @@ class RewardEvaluator:
 
         cond = torch.zeros((1, cond_dim), dtype=torch.float32)
         t = torch.zeros((1), dtype=torch.float32)
-        
         rewards = []
         num_batches = (len(state_actions_tensor) + self.batch_size - 1) // self.batch_size
         for i in tqdm.tqdm(range(num_batches)):
@@ -74,7 +74,6 @@ class RewardEvaluator:
             state_action_batch = state_actions_tensor[start_idx:end_idx]
             cond_batch = cond.expand(len(state_action_batch), -1)
             t_batch = t.expand(len(state_action_batch))
-
             with torch.no_grad():
                 reward_batch = self.model(state_action_batch, cond_batch, t_batch)
             rewards.extend(reward_batch.cpu().numpy())
@@ -90,7 +89,7 @@ class TrainingPipeline:
             value_learning_rate=3e-4,
             batch_size=256,
             actor_update_frequency=1,
-            critic_update_frequency=1,
+            critic_update_frequency=1, 
             value_update_frequency=1,
             target_update_interval=2000,
             n_critics=2,
@@ -177,7 +176,7 @@ class TrainingPipeline:
 
 # Main Execution
 model_config_path = '/home/shubham/diffusion-relative-rewards/locomotion/locomotion_diffusion_logs/logs/halfcheetah-expert-v2/gradient_matching/H4_Dmixed_DIMS16,16,32,32_ARCHmodels.ValueFunction_from_replay/model_config.pkl'
-checkpoint_path = '/home/shubham/diffusion-relative-rewards/locomotion/locomotion_diffusion_logs/logs/halfcheetah-expert-v2/gradient_matching/H4_Dmixed_DIMS16,16,32,32_ARCHmodels.ValueFunction_from_replay/model_config.pkl'
+checkpoint_path = '/home/shubham/diffusion-relative-rewards/locomotion/locomotion_diffusion_logs/logs/halfcheetah-expert-v2/gradient_matching/H4_Dmixed_DIMS16,16,32,32_ARCHmodels.ValueFunction_from_replay/state_49995.pt'
 
 # Load model and configuration
 model_config = ModelLoader.load_config(model_config_path)
@@ -187,7 +186,7 @@ reward_model.load_state_dict(chk, strict=False)
 reward_model.eval()
 
 # Process dataset
-processor = DatasetProcessor('halfcheetah-medium-expert-v2')
+processor = DatasetProcessor('')
 dataset = processor.process_episodes()
 
 # Compute rewards
@@ -197,5 +196,5 @@ dataset = MDPDataset(dataset.observations, dataset.actions, rewards, dataset.ter
 
 # Training
 pipeline = TrainingPipeline(dataset, processor.env)
-pipeline.train(500000, 10000)
+pipeline.train(1000000, 10000)
 pipeline.plot_metrics()
